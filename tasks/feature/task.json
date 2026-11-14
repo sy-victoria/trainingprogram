@@ -1,0 +1,1 @@
+{"prompt":"Implement unique_in_order(items) in solution.py. Return a new list that keeps only the first occurrence of each item, preserving order. Support unhashable items such as lists and do not mutate input. Run tests."}

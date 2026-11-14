@@ -1,0 +1,4 @@
+*
+!docker/
+!docker/Dockerfile
+!docker/judge_worker.py
