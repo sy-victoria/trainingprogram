@@ -32,6 +32,10 @@ python -m pytest -q
 
 脚本需要访问GitHub、PyPI、Conda/NVIDIA源和Hugging Face。连接失败先保留日志，修复网络后重跑；不要无依据更换模型revision或依赖版本。脚本不修改宿主驱动。
 
+安装脚本默认显式使用官方 `https://pypi.org/simple`，避免AutoDL预设镜像尚未同步锁定版本。不修改全局pip配置；确需使用其他已同步的源时，可设置 `TP_PIP_INDEX_URL`。CPU版PyTorch仍使用其官方CPU轮子源。
+
+若此前出现 `No matching distribution found for langgraph==1.2.22`，随后出现 `tp: command not found`，说明依赖安装中断，并非环境没有创建。执行 `git pull --ff-only` 后重跑 `bash scripts/bootstrap.sh` 即可复用已有Conda环境。等脚本输出 `Environment ready` 再继续；无需删除环境或降低锁定版本。
+
 每次新终端都执行 `conda activate tp-agent`，并保持相同的 `TP_DATA`。`TP_TOOLS_PYTHON` 默认 `/root/miniconda3/envs/tp-tools/bin/python`；只有更改工具环境安装位置时才需要设置它。
 
 ### 判题隔离检查

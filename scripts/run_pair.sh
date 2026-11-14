@@ -5,6 +5,10 @@ SIZE="${1:-0.8B}"
 MODE="${2:-smoke}"
 case "$SIZE" in 0.8B|2B|4B) ;; *) printf 'Invalid size\n' >&2; exit 1;; esac
 case "$MODE" in smoke|subset|full) ;; *) printf 'Invalid mode\n' >&2; exit 1;; esac
+if ! command -v tp >/dev/null 2>&1; then
+  printf 'tp is not installed or not on PATH. Complete scripts/bootstrap.sh successfully, then conda activate tp-agent.\n' >&2
+  exit 1
+fi
 export TP_DATA="${TP_DATA:-/root/autodl-tmp/trainingprogram-data}"
 mkdir -p "$TP_DATA/diagnostics"
 tp model prepare --size "$SIZE"
