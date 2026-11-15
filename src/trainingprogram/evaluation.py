@@ -138,10 +138,12 @@ def generate(run_id, size, variant, mode="smoke", port=8080, client=None):
               "dataset_sha256": data["raw_sha256"], "task_ids": ids, "mode": mode,
               "generation": GENERATION, "server": {k: service[k] for k in ("context", "threads", "parallel")},
               "harness_hash": digest({p.name: sha256(p) for p in sorted((ROOT / "src/trainingprogram").glob("*.py"))})}
+    current_environment = environment()
+    config["hardware"] = {k: current_environment.get(k) for k in ("platform", "gpu", "cgroup")}
     with exclusive(run / ".lock"):
         ensure_config(run, config)
         if not (run / "environment.json").exists():
-            write_json(run / "environment.json", environment())
+            write_json(run / "environment.json", current_environment)
             write_json(run / "artifact.json", artifact)
             write_json(run / "problems.json", {i: data["problems"][i] for i in ids})
         generate_samples(run, config, data["problems"], client, service.get("pid"))
@@ -239,17 +241,43 @@ def speed(run_id, port=8080):
     client = ModelClient(f"http://127.0.0.1:{port}/v1", alias)
     client.verify(alias)
     service = read_json(data_root() / "services" / f"{port}.json")
+    if service["alias"] != alias or any(service[k] != config["server"][k] for k in ("context", "threads", "parallel")):
+        raise ValueError("Speed service configuration differs from the generation run")
+    if "hardware" in config:
+        current = environment()
+        if {k: current.get(k) for k in ("platform", "gpu", "cgroup")} != config["hardware"]:
+            raise ValueError("Speed measurement hardware differs from the generation run")
     with exclusive(run / ".lock"):
+        speed_config = {"generation_config_hash": digest(config), "prompts": SPEED_PROMPTS,
+                        "repeats": 3, "max_tokens": 256, "warmup_per_session": 1}
+        ensure_config(run / "speed", speed_config)
         if (run / "speed.json").exists():
-            raise ValueError("Speed results already exist; preserve the original measurement")
+            return str(run / "speed.json")
         client.chat([{"role": "user", "content": SPEED_PROMPTS[0]}], max_tokens=256)
         records = []
         for repeat in range(3):
             for i, prompt in enumerate(SPEED_PROMPTS):
-                with ResourceMonitor(service["pid"]) as monitor:
-                    response = client.chat([{"role": "user", "content": prompt}], max_tokens=256)
-                records.append({"repeat": repeat, "prompt_id": i, "response": response, "resources": monitor.result()})
-        write_json(run / "speed.json", {"prompts": SPEED_PROMPTS, "repeats": 3, "warmup": 1,
-                                        "max_tokens": 256, "records": records,
+                path = run / "speed" / f"repeat-{repeat}-prompt-{i}.json"
+                if path.exists():
+                    record = read_json(path)
+                    if record["config_hash"] != digest(speed_config):
+                        raise ValueError("Speed sample configuration mismatch")
+                    if record["status"] == "started":
+                        record["status"] = "interrupted"
+                        write_json(path, record)
+                else:
+                    record = {"repeat": repeat, "prompt_id": i, "status": "started", "response": {},
+                              "config_hash": digest(speed_config)}
+                    write_json(path, record)
+                    with ResourceMonitor(service["pid"]) as monitor:
+                        try:
+                            record["response"] = client.chat([{"role": "user", "content": prompt}], max_tokens=256)
+                            record["status"] = "completed"
+                        except Exception as e:
+                            record.update(status="request_error", error=type(e).__name__)
+                    record["resources"] = monitor.result()
+                    write_json(path, record)
+                records.append(record)
+        write_json(run / "speed.json", {**speed_config, "records": records,
                                         "note": "tokens/s includes prefill; llama-server prefix cache may be warm"})
     return str(run / "speed.json")

@@ -12,7 +12,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .aci import ACI
 from .client import ModelClient
-from .common import ROOT, write_json, read_json, exclusive, environment, safe_name
+from .common import ROOT, write_json, read_json, exclusive, environment, safe_name, data_root
 
 SYSTEM = """You are a coding agent. Use tools to inspect and repair the provided Python repository.
 Return exactly one JSON object per turn, without markdown or reasoning text:
@@ -159,4 +159,49 @@ def invoke_run(directory, decision=None, feedback="", status_only=False, client=
         if result["pending"]:
             result["status"] = "awaiting_approval"
         write_json(directory / "status.json", result)
+        return result
+
+
+def run_suite(suite_id, base_url, model, budget=10, judging="defer"):
+    """Run three tasks with explicit interactive approval; quitting preserves state."""
+    from .evaluation import ensure_config
+    from .tasks import verify_agent
+    from .sandbox import DockerSandbox
+    from .client import ModelClient
+    safe_name(suite_id)
+    if judging == "required":
+        DockerSandbox().probe()
+    ModelClient(base_url, model).verify(model)
+    folder = data_root() / "agent_suites" / suite_id
+    config = {"base_url": base_url, "model": model, "budget": budget, "judging": judging,
+              "tasks": ["logic", "boundary", "feature"]}
+    with exclusive(folder / ".lock"):
+        ensure_config(folder, config)
+        results = {}
+        for task in config["tasks"]:
+            directory = data_root() / "agents" / safe_name(f"{suite_id}-{task}")
+            if not directory.exists():
+                create_run(directory, task, base_url, model, budget)
+            else:
+                saved = read_json(directory / "config.json")
+                if any(saved[k] != config[k] for k in ("base_url", "model", "budget")) or saved["task"] != task:
+                    raise ValueError("Existing task belongs to another suite configuration")
+            state = invoke_run(directory)
+            while state["pending"]:
+                print(json.dumps({"task": task, "approval": state["pending"]}, ensure_ascii=False, indent=2))
+                choice = input("[a] approve, [r] reject, [f] feedback, [q] pause suite: ").strip().lower()
+                if choice == "q":
+                    result = {"status": "paused", "current_task": task, "tasks": results}
+                    write_json(folder / "status.json", result)
+                    return result
+                if choice not in {"a", "r", "f"}:
+                    continue
+                feedback = input("Feedback: ") if choice in {"r", "f"} else ""
+                state = invoke_run(directory, {"a": "approve", "r": "reject", "f": "feedback"}[choice], feedback)
+            results[task] = state
+            if judging == "required":
+                results[task]["acceptance"] = verify_agent(directory)
+            write_json(folder / "status.json", {"status": "running", "tasks": results})
+        result = {"status": "finished", "tasks": results, "judging": judging}
+        write_json(folder / "status.json", result)
         return result

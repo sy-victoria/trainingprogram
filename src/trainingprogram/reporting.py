@@ -15,7 +15,7 @@ from .evaluation import task_filename
 
 def score(config, judgments):
     expected = config["task_ids"]
-    valid = [judgments[t] for t in expected if t in judgments and judgments[t]["status"] != "infrastructure_error"]
+    valid = [judgments[t] for t in expected if t in judgments and judgments[t]["status"] in {"pass", "fail", "invalid_generation"}]
     correct = sum(x.get("passed") is True for x in valid)
     complete = len(valid) == len(expected)
     return {"n": len(expected), "judged": len(valid), "passed": correct, "complete": complete,
@@ -62,8 +62,9 @@ def summarize():
                            "disk_reduction_pct": 100 * (1 - quant["artifact_gib"] / baseline["artifact_gib"]),
                            "regressions": [t for t in base_judgments if base_judgments[t].get("passed") and not quant_judgments[t].get("passed")],
                            "improvements": [t for t in base_judgments if not base_judgments[t].get("passed") and quant_judgments[t].get("passed")]})
+    agents = agent_summary()
     directory = data_root() / "summary"
-    write_json(directory / "results.json", {"runs": rows, "pairs": paired})
+    write_json(directory / "results.json", {"runs": rows, "pairs": paired, "agents": agents})
     if rows:
         with (directory / "results.csv").open("w", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(rows[0]))
@@ -77,10 +78,30 @@ def summarize():
     lines += ["", "## 同配置配对比较", ""]
     for p in paired:
         lines.append(f"- {p['baseline_run']} → {p['quant_run']}：{p['delta_pp']:+.2f} 个百分点；文件体积减少 {p['disk_reduction_pct']:.1f}%。")
+    lines += ["", "## Agent 独立验收", "", "| Run | 任务 | 状态 | 模型调用数 | 验收 |", "|---|---|---|---|---|"]
+    for a in agents:
+        label = "待验收" if a["passed"] is None else "通过" if a["passed"] else "失败"
+        lines.append(f"| {a['run']} | {a['task']} | {a['status']} | {a['model_calls']} | {label} |")
+    lines += ["", "Agent状态finished是模型主动结束；只有独立验收通过才计为成功。离线模拟不计入本表。", ""]
     lines += ["", "## 报告待补充", "", "- 真实 Agent 任务通过率与审批/恢复演示。", "- 量化回归与改善题目的原因分析。",
               "- 速度指标包含 prefill；显存为整卡采样峰值，不能当作精确分配器峰值。", "- Qwen3.8 与大规模模型尚未覆盖。", ""]
     (directory / "REPORT.md").write_text("\n".join(lines), encoding="utf-8")
     return str(directory)
+
+
+def agent_summary():
+    rows = []
+    for path in sorted((data_root() / "agents").glob("*/config.json")):
+        folder = path.parent
+        config = read_json(path)
+        state = read_json(folder / "status.json") if (folder / "status.json").exists() else {}
+        budget = read_json(folder / "budget.json") if (folder / "budget.json").exists() else {"calls": 0}
+        acceptance = read_json(folder / "acceptance.json") if (folder / "acceptance.json").exists() else {}
+        rows.append({"run": folder.name, "task": config["task"], "model": config["model"],
+                     "status": state.get("status", "new"), "model_calls": budget["calls"],
+                     "approvals": len(list((folder / "approvals").glob("*.json"))),
+                     "passed": acceptance.get("passed"), "test_output": acceptance.get("output")})
+    return rows
 
 
 SECRET_KEY = re.compile(r"^(?:api[_-]?key|access[_-]?token|authorization|password|secret|credential)$", re.I)
@@ -106,7 +127,7 @@ def export_bundle(destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Only application-owned result trees, never environment variables, caches or models.
     with zipfile.ZipFile(destination, "x", compression=zipfile.ZIP_DEFLATED) as archive:
-        for folder in ("runs", "agents", "summary", "diagnostics"):
+        for folder in ("runs", "agents", "agent_suites", "experiments", "summary", "diagnostics"):
             for path in sorted((root / folder).rglob("*")):
                 if not path.is_file() or path.is_symlink() or any(p.is_symlink() for p in path.parents):
                     continue

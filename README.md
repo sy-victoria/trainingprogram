@@ -4,6 +4,49 @@
 
 本次覆盖 Qwen3.5-0.8B／2B／4B 的 BF16 文本 GGUF 与 Q4_K_M。Qwen3.8、9B、27B及更大规模留待后续，**不代表原作业全部完成**。仓库不包含实验成绩、模型权重或密钥。
 
+## 没有算力时：准备与离线自检
+
+无卡模式只需要轻量Python环境，不下载权重、不安装CUDA工具链、不编译llama.cpp：
+
+```bash
+cd /root/trainingprogram
+git -c http.version=HTTP/1.1 pull --ff-only && bash scripts/bootstrap.sh --agent-only
+source /root/miniconda3/etc/profile.d/conda.sh
+conda activate tp-agent
+tp check --stage agent
+tp selftest
+python -m pytest -q
+```
+
+`tp selftest` 演示读取文件、审批暂停、重新连接SQLite后的恢复、幂等补丁和评测续跑。它使用确定性模拟响应，不调用真实模型、不执行生成代码，数据仅写入 `$TP_DATA/offline/`，不计入成绩或普通导出包。2GiB/0.5CPU的无卡模式可以做这些检查；安装速度可能较慢。
+
+## 算力恢复后：统一实验入口
+
+先完成后文的GPU环境安装和0.8B冒烟检查，再用一个命令运行全部六组正式实验：
+
+```bash
+bash scripts/bootstrap.sh --all
+conda activate tp-agent
+tp check --stage gpu --size 4B
+tp experiment run --id formal-v1 --mode subset --judge defer --cleanup-completed
+```
+
+- 默认顺序为0.8B、2B、4B，每个规模运行BF16与Q4_K_M。`--sizes 0.8B`可以只跑一个规模。
+- `--judge defer`明确只生成/测速；如果Docker可用且希望一起判题，改用`--judge required`，会在GPU工作开始前检查隔离环境。
+- `--cleanup-completed`是显式清理授权：一个规模两种精度完成后清理它的原权重和GGUF，保留manifest及结果；最后一个规模保留给Agent演示。不传此参数则保留所有文件，空间不足会停止。
+- 中断后重跑完全相同命令；已完成的组跳过，不重新下载已清理的小模型。配置或代码变化需用新ID。
+- 各组ID为`formal-v1-0.8B-BF16-subset`等，阶段状态保存在`experiments/formal-v1/status.json`。测速也逐请求保存；中断的测速请求标记缺失，不偷偷重测。
+
+有Docker后统一判题，无需再次启动模型：
+
+```bash
+tp experiment judge --id formal-v1
+tp summary
+tp export --output /root/autodl-tmp/formal-v1-results.zip
+```
+
+统一入口的阶段结束不等于每题都成功；真实成绩以summary中的有效判题数、错误类型和完整性为准。完整验收清单见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)。
+
 ## 0. 服务器拉取与只读检查
 
 ```bash
@@ -154,6 +197,23 @@ tp agent verify --run demo-logic
 ```
 
 另外两个任务：`--task boundary` 和 `--task feature`，使用新的运行ID。验收测试不会发送给Agent，验收时恢复原始公开测试并加入隐藏测试。
+
+也可以在4B服务运行时交互完成三个任务：
+
+```bash
+tp agent suite --run agent-v1 --model 替换为实际服务别名 --judge defer
+```
+
+每个补丁都显示后询问`a`批准、`r`拒绝、`f`补充指令或`q`暂停。再次执行同一命令可继续；不会自动批准。若Docker可用，可从开始时选择`--judge required`自动做每个任务的独立验收。延后判题时执行：
+
+```bash
+tp agent verify --run agent-v1-logic
+tp agent verify --run agent-v1-boundary
+tp agent verify --run agent-v1-feature
+tp summary
+```
+
+报告会单独汇总Agent状态、模型调用数、审批记录数量和独立验收结果。
 
 ### 演示checkpoint恢复
 

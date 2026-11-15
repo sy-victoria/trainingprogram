@@ -53,9 +53,18 @@ def verify_llama():
 
 def prepare(size):
     from huggingface_hub import snapshot_download
+    from .readiness import require_gpu
+    require_gpu(size)
     directory = model_dir(size)
     directory.mkdir(parents=True, exist_ok=True)
     with exclusive(data_root() / "models" / ".prepare.lock"):
+        # Existing complete artifacts do not need a source redownload after cleanup.
+        if all((directory / f"{v}.{ext}").exists() for v in ("BF16", "Q4_K_M") for ext in ("gguf", "json")):
+            for variant in ("BF16", "Q4_K_M"):
+                _, manifest = load_artifact(size, variant)
+                if manifest["revision"] != versions()["models"][size]["revision"] or manifest["llama_cpp"] != versions()["llama_cpp"]:
+                    raise ValueError("Existing model revision differs from the project lock")
+            return str(directory)
         # Conservative allowance for source + BF16 + quantized artifact + temporary files.
         minimum = {"0.8B": 6, "2B": 14, "4B": 26}[size] * 1024**3
         if not (directory / "source").exists() and shutil.disk_usage(directory).free < minimum:
@@ -107,6 +116,8 @@ def load_artifact(size, variant, verify=True):
 
 
 def serve(size, variant, port=8080):
+    from .readiness import require_gpu
+    require_gpu(size)
     import signal
     def stop(signum, frame):
         raise KeyboardInterrupt

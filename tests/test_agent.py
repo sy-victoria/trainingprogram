@@ -113,3 +113,28 @@ def test_test_files_cannot_be_patched(tmp_path):
     aci = ACI(run / "workspace", run / "journal")
     with pytest.raises(ValueError):
         aci.prepare_patch({"path": "tests/test_solution.py", "before": "assertEqual", "after": "assertTrue"})
+
+
+def test_suite_pause_and_resume_requires_human_decisions(tmp_path, monkeypatch):
+    from trainingprogram import agent
+    monkeypatch.setenv("TP_DATA", str(tmp_path))
+    class VerifiedClient:
+        def __init__(self, *args):
+            pass
+        def verify(self, *args):
+            pass
+    monkeypatch.setattr("trainingprogram.client.ModelClient", VerifiedClient)
+    decisions = []
+    def invoke(directory, decision=None, feedback=""):
+        if decision:
+            decisions.append(decision)
+            return {"status": "finished", "pending": []}
+        return {"status": "awaiting_approval", "pending": [{"patch": "fake"}]}
+    monkeypatch.setattr(agent, "invoke_run", invoke)
+    monkeypatch.setattr("builtins.input", lambda prompt: "q")
+    assert agent.run_suite("suite", "http://localhost/v1", "fake")["status"] == "paused"
+    assert not decisions
+    monkeypatch.setattr("builtins.input", lambda prompt: "a")
+    result = agent.run_suite("suite", "http://localhost/v1", "fake")
+    assert result["status"] == "finished"
+    assert decisions == ["approve"] * 3

@@ -4,15 +4,16 @@
 
 - Windows、Python 3.11.9，安装并检查 `requirements/agent.lock`，`pip check` 无冲突。
 - 项目editable安装成功，`python -m trainingprogram.cli --help` 正常。当前Windows应用控制策略阻止新生成的 `tp.exe`，因此本机通过Python模块入口验证；Linux `tp`入口由CI和服务器检查。
-- `python -m pytest -q`：30 passed，3 skipped。跳过的是需要真实Docker引擎的三个集成测试。
+- v0.2的Windows本地 `python -m pytest -q`：44 passed，5 skipped。跳过的是4个真实Docker集成测试和1个Linux bootstrap集成测试。
 - 覆盖审批与拒绝、重建图后的SQLite恢复、请求中断预算、过期补丁拒绝、操作日志幂等、路径越界拦截、测试文件保护、错误工具反馈。
 - 覆盖真实本地HTTP SSE模拟服务、逐题保存与续跑、配置改变拒绝、代码提取、判题基础设施错误重试、pass@1分母、配对差值、导出排除与脱敏、权重dtype头读取和定向清理。
 - Python源码编译检查、逐文件Bash语法检查通过。
 - Qwen-Agent和Deep Agents分别在独立环境完成依赖安装、帮助入口与Agent对象构造检查；这些检查没有调用真实模型。已补齐Qwen-Agent导入需要但未声明的numpy、soundfile、tqdm、python-dateutil，两个示例环境的完整解析版本均已保存。
+- v0.2补充：无卡配额识别、下载前GPU闸门、六组实验顺序/续跑、模型启动失败清理、强制判题预检、逐请求测速恢复、Agent套件人工审批、离线数据与真实报告隔离。
 
 ## CI配置
 
-GitHub Actions包含Linux/Windows单元测试，以及Linux真实Docker测试：官方判题函数的正确/错误代码、无限循环超时、禁网与只读挂载。CI配置存在不代表它已经通过；以仓库Actions状态为准。
+GitHub Actions包含Linux/Windows单元测试、离线自检，以及Linux真实Docker测试：官方判题函数的正确/错误代码、无限循环超时、stdin阻塞时的墙钟超时、禁网与只读挂载。Linux还通过假的Conda命令验证agent-only安装流程不访问GPU或安装CUDA。CI配置存在不代表它已经通过；以仓库Actions状态为准。
 
 ## 仍需服务器验证
 

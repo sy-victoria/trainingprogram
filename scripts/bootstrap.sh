@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+STAGE="${1:---all}"
+case "$STAGE" in
+  --agent-only|--all) ;;
+  *) printf 'Usage: bash scripts/bootstrap.sh [--agent-only|--all]\n' >&2; exit 2 ;;
+esac
 TP_DATA="${TP_DATA:-/root/autodl-tmp/trainingprogram-data}"
 export TP_DATA
 # AutoDL images may configure a lagging mirror in pip.conf. Override it per
@@ -11,14 +16,26 @@ if [[ ! -x "$CONDA_EXE" ]]; then
   printf 'Conda not found. Set CONDA_EXE to its absolute path.\n' >&2
   exit 1
 fi
-nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
-python - <<'PY'
+if [[ "$STAGE" == "--all" ]]; then
+  if ! nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader; then
+    printf 'No GPU. Use --agent-only to prepare Python and run offline checks, or start the GPU instance for --all.\n' >&2
+    exit 1
+  fi
+fi
+TP_BOOTSTRAP_STAGE="$STAGE" python - <<'PY'
 import shutil
 import subprocess
-driver = subprocess.check_output(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'], text=True).splitlines()[0]
-if tuple(int(x) for x in driver.split('.')[:2]) < (570, 26):
-    raise SystemExit('This script targets driver >=570.26 / CUDA 12.8. Do not alter the host driver from the container.')
-for path, gib in [('/root', 15), ('/root/autodl-tmp', 30)]:
+import os
+from pathlib import Path
+full = os.environ['TP_BOOTSTRAP_STAGE'] == '--all'
+if full:
+    driver = subprocess.check_output(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'], text=True).splitlines()[0]
+    if tuple(int(x) for x in driver.split('.')[:2]) < (570, 26):
+        raise SystemExit('This script targets driver >=570.26 / CUDA 12.8. Do not alter the host driver from the container.')
+    limit = Path('/sys/fs/cgroup/memory.max')
+    if limit.exists() and limit.read_text().strip() != 'max' and int(limit.read_text()) < 8 * 1024**3:
+        raise SystemExit('At least 8GiB container memory is required for the GPU build. Use --agent-only in no-GPU mode.')
+for path, gib in ([('/root', 15), ('/root/autodl-tmp', 30)] if full else [('/root', 3)]):
     if shutil.disk_usage(path).free < gib * 1024**3:
         raise SystemExit(f'Need {gib} GiB free at {path}; inspect existing files before retrying')
 PY
@@ -30,6 +47,11 @@ fi
 "$CONDA_EXE" run --no-capture-output -n tp-agent python -m pip install --index-url "$TP_PIP_INDEX_URL" --no-deps --no-build-isolation -e .
 "$CONDA_EXE" run --no-capture-output -n tp-agent python -m pip check
 "$CONDA_EXE" run --no-capture-output -n tp-agent tp --help
+"$CONDA_EXE" run -n tp-agent python -m pip freeze > "$TP_DATA/diagnostics/agent-resolved.txt"
+if [[ "$STAGE" == "--agent-only" ]]; then
+  printf '\nAgent environment ready (GPU tools not installed). Run: conda activate tp-agent; tp check --stage agent; tp selftest\n'
+  exit 0
+fi
 # nvcc in the original image is 11.3; build llama.cpp with an independent CUDA 12.8 toolchain.
 if ! "$CONDA_EXE" run -n tp-tools python --version >/dev/null 2>&1; then
   "$CONDA_EXE" create -y -n tp-tools python=3.11 pip

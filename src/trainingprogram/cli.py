@@ -12,6 +12,20 @@ def main():
     parser = argparse.ArgumentParser(description="Coding agent and Qwen quantization coursework")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor")
+    check_parser = sub.add_parser("check")
+    check_parser.add_argument("--stage", choices=["agent", "gpu"], default="agent")
+    check_parser.add_argument("--size", choices=["0.8B", "2B", "4B"], default="0.8B")
+    sub.add_parser("selftest")
+    experiment = sub.add_parser("experiment").add_subparsers(dest="operation", required=True)
+    matrix = experiment.add_parser("run")
+    matrix.add_argument("--id", required=True)
+    matrix.add_argument("--sizes", choices=["0.8B", "2B", "4B"], nargs="+", default=["0.8B", "2B", "4B"])
+    matrix.add_argument("--mode", choices=["smoke", "subset", "full"], default="subset")
+    matrix.add_argument("--judge", choices=["required", "defer"], default="defer")
+    matrix.add_argument("--cleanup-completed", action="store_true")
+    matrix.add_argument("--port", type=int, default=8080)
+    matrix_judge = experiment.add_parser("judge")
+    matrix_judge.add_argument("--id", required=True)
     model = sub.add_parser("model").add_subparsers(dest="operation", required=True)
     for operation in ("prepare", "serve", "cleanup"):
         p = model.add_parser(operation)
@@ -32,6 +46,12 @@ def main():
             p.add_argument("--variant", choices=["BF16", "Q4_K_M"], required=True)
             p.add_argument("--mode", choices=["smoke", "subset", "full"], default="smoke")
     agent = sub.add_parser("agent").add_subparsers(dest="operation", required=True)
+    suite = agent.add_parser("suite")
+    suite.add_argument("--run", required=True)
+    suite.add_argument("--model", required=True)
+    suite.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
+    suite.add_argument("--budget", type=int, default=10)
+    suite.add_argument("--judge", choices=["required", "defer"], default="defer")
     for operation in ("run", "resume", "status", "verify"):
         p = agent.add_parser(operation)
         p.add_argument("--run", required=True)
@@ -50,6 +70,8 @@ def main():
     try:
         if args.command == "doctor":
             result = environment()
+            from .readiness import check
+            result["readiness"] = {"agent": check("agent"), "gpu": check("gpu")}
             root = data_root()
             existing = root
             while not existing.exists():
@@ -61,6 +83,18 @@ def main():
             except Exception as e:
                 result["sandbox"] = {"available": False, "reason": str(e)}
             write_json(root / "diagnostics" / "environment.json", result)
+        elif args.command == "check":
+            from .readiness import check
+            result = check(args.stage, args.size)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            raise SystemExit(0 if result["ready"] else 1)
+        elif args.command == "selftest":
+            from .selftest import run_selftest
+            result = run_selftest()
+        elif args.command == "experiment":
+            from .experiment import run_matrix, judge_matrix
+            result = (judge_matrix(args.id) if args.operation == "judge" else
+                      run_matrix(args.id, args.sizes, args.mode, args.judge, args.cleanup_completed, args.port))
         elif args.command == "model":
             from . import models
             if args.operation == "prepare":
@@ -80,11 +114,14 @@ def main():
         elif args.command == "agent":
             from . import agent
             directory = data_root() / "agents" / safe_name(args.run)
-            if args.operation == "run":
+            if args.operation in {"run", "suite"}:
                 if not 1 <= args.budget <= 100:
                     raise ValueError("budget must be between 1 and 100")
+            if args.operation == "run":
                 agent.create_run(directory, args.task, args.base_url, args.model, args.budget)
-            if args.operation == "verify":
+            if args.operation == "suite":
+                result = agent.run_suite(args.run, args.base_url, args.model, args.budget, args.judge)
+            elif args.operation == "verify":
                 from .tasks import verify_agent
                 result = verify_agent(directory)
             else:

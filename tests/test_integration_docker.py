@@ -26,6 +26,12 @@ def test_real_wall_timeout():
     assert result["timeout"]
 
 
+def test_stdin_backpressure_still_obeys_wall_timeout():
+    result = DockerSandbox().run(None, ["python", "-I", "-c", "import time; time.sleep(60)"],
+                                 timeout=2, stdin="x" * (2 * 1024**2))
+    assert result["timeout"]
+
+
 def test_real_sandbox_readonly_and_network(tmp_path):
     tmp_path.chmod(0o755)
     (tmp_path / "value.txt").write_text("unchanged")

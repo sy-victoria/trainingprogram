@@ -67,21 +67,33 @@ class DockerSandbox:
 
         thread = threading.Thread(target=drain, daemon=True)
         thread.start()
+        writer = None
+        if stdin is not None:
+            def feed():
+                try:
+                    p.stdin.write(stdin.encode())
+                    p.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass  # A failed container may exit without reading input.
+            writer = threading.Thread(target=feed, daemon=True)
+            writer.start()
         try:
-            if stdin is not None:
-                p.stdin.write(stdin.encode())
-                p.stdin.close()
             p.wait(timeout=timeout)
             timed_out = False
         except subprocess.TimeoutExpired:
             timed_out = True
-            subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=15)
-            p.kill()
-            p.wait(timeout=10)
         finally:
-            if p.poll() is None:
+            # Also remove a container whose docker CLI exited early; only our UUID is targeted.
+            try:
                 subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=15)
-                p.kill()
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            finally:
+                if p.poll() is None:
+                    p.kill()
+                    p.wait(timeout=10)
         thread.join(timeout=5)
+        if writer:
+            writer.join(timeout=5)
         return {"returncode": p.returncode, "timeout": timed_out,
                 "output": chunks.decode("utf-8", errors="replace"), "image_id": self.image_id}

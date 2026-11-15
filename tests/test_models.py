@@ -30,3 +30,17 @@ def test_cleanup_rejects_active_model(tmp_path, monkeypatch):
     write_json(tmp_path / "services/8080.json", {"artifact": {"size": "0.8B"}})
     with pytest.raises(RuntimeError, match="Stop"):
         cleanup("0.8B", "BF16")
+
+
+def test_prepare_rejects_no_gpu_before_download(tmp_path, monkeypatch):
+    from trainingprogram.models import prepare
+    monkeypatch.setenv("TP_DATA", str(tmp_path))
+    def reject(size):
+        raise RuntimeError("No GPU")
+    def no_download(*args, **kwargs):
+        raise AssertionError("download should not be attempted")
+    monkeypatch.setattr("trainingprogram.readiness.require_gpu", reject)
+    monkeypatch.setattr("huggingface_hub.snapshot_download", no_download)
+    with pytest.raises(RuntimeError, match="No GPU"):
+        prepare("0.8B")
+    assert not (tmp_path / "models").exists()
