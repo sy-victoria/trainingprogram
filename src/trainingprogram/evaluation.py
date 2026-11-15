@@ -17,6 +17,7 @@ import psutil
 from .client import ModelClient
 from .common import ROOT, data_root, write_json, read_json, digest, exclusive, environment, safe_name, sha256
 from .models import load_artifact, versions
+from .common import gpu_device
 from .sandbox import DockerSandbox, SandboxUnavailable
 
 DATA_URL = "https://github.com/evalplus/humanevalplus_release/releases/download/v0.1.10/HumanEvalPlus.jsonl.gz"
@@ -80,7 +81,7 @@ class ResourceMonitor:
             except psutil.Error:
                 pass
         try:
-            p = subprocess.run(["nvidia-smi", "--id=0", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            p = subprocess.run(["nvidia-smi", "--id=" + gpu_device(), "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
                                capture_output=True, text=True, timeout=3)
             if p.returncode == 0:
                 value = float(p.stdout.strip())
@@ -103,7 +104,7 @@ class ResourceMonitor:
 
     def result(self):
         return {"peak_server_rss_bytes_sampled": self.rss, "peak_gpu_device_mib_sampled": self.gpu,
-                "sampling_interval_s": 1, "gpu_scope": "entire GPU 0; run without other GPU workloads"}
+                "sampling_interval_s": 1, "gpu_scope": f"entire GPU {gpu_device()}; run without other GPU workloads"}
 
 
 def ensure_config(run, config):

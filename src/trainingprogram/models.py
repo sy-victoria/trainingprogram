@@ -135,6 +135,8 @@ def serve(size, variant, port=8080):
     with exclusive(root / (key + ".lock")):
         with (root / (key + ".log")).open("a", encoding="utf-8") as log:
             env = os.environ.copy()
+            from .common import gpu_device
+            env["CUDA_VISIBLE_DEVICES"] = gpu_device()
             tool_prefix = Path(tools_python()).parent.parent
             env["LD_LIBRARY_PATH"] = ":".join([str(tool_prefix / "lib"), str(tool_prefix / "targets/x86_64-linux/lib"), env.get("LD_LIBRARY_PATH", "")])
             p = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, env=env)

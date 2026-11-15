@@ -2,7 +2,7 @@
 from pathlib import Path
 import subprocess
 
-from .common import command_output
+from .common import command_output, gpu_device
 
 
 def quotas(root=Path("/sys/fs/cgroup")):
@@ -33,7 +33,7 @@ def quotas(root=Path("/sys/fs/cgroup")):
 
 
 def gpu_info():
-    result = command_output(["nvidia-smi", "--id=0", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"])
+    result = command_output(["nvidia-smi", "--id=" + gpu_device(), "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"])
     if result.get("code") != 0:
         return {"available": False, "detail": result}
     try:

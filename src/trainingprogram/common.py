@@ -102,6 +102,14 @@ def command_output(args):
         return {"error": str(e)}
 
 
+def gpu_device():
+    """Physical selector shared by CUDA and nvidia-smi (single GPU experiments)."""
+    value = os.environ.get("CUDA_VISIBLE_DEVICES", "0").strip()
+    if not value or "," in value or value == "-1":
+        raise ValueError("Set CUDA_VISIBLE_DEVICES to one GPU index or UUID")
+    return value
+
+
 def environment():
     import importlib.metadata
     import psutil
@@ -109,7 +117,7 @@ def environment():
         "python": sys.version, "platform": platform.platform(),
         "cpu_count_visible": os.cpu_count(), "memory_visible_bytes": psutil.virtual_memory().total,
         "git": command_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"]),
-        "gpu": command_output(["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"]),
+        "gpu": command_output(["nvidia-smi", "--id=" + gpu_device(), "--query-gpu=uuid,name,driver_version,memory.total", "--format=csv,noheader"]),
         "packages": {p.metadata["Name"]: p.version for p in importlib.metadata.distributions() if p.metadata["Name"]},
         "cgroup": {str(p): p.read_text().strip() for p in
                    [Path("/sys/fs/cgroup/memory.max"), Path("/sys/fs/cgroup/cpu.max")] if p.exists()},
