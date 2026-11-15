@@ -67,9 +67,22 @@ fi
 LLAMA_DIR="$TP_DATA/tools/llama.cpp"
 LLAMA_REV=$(python -c 'import json; print(json.load(open("configs/versions.json"))["llama_cpp"])')
 if [[ ! -d "$LLAMA_DIR/.git" ]]; then
-  git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
+  git init "$LLAMA_DIR"
+  git -C "$LLAMA_DIR" remote add origin https://github.com/ggml-org/llama.cpp.git
 fi
-git -C "$LLAMA_DIR" fetch origin "$LLAMA_REV"
+if [[ "$(git -C "$LLAMA_DIR" rev-parse HEAD 2>/dev/null || true)" != "$LLAMA_REV" ]]; then
+  for attempt in 1 2 3; do
+    if git -c http.version=HTTP/1.1 -c http.lowSpeedLimit=1 -c http.lowSpeedTime=120 \
+        -C "$LLAMA_DIR" fetch --depth 1 origin "$LLAMA_REV"; then
+      break
+    fi
+    if [[ "$attempt" == 3 ]]; then
+      printf 'Pinned llama.cpp source download failed after 3 attempts. Rerun to resume preparation.\n' >&2
+      exit 1
+    fi
+    sleep 5
+  done
+fi
 git -C "$LLAMA_DIR" checkout --detach "$LLAMA_REV"
 # Upstream conversion dependencies are tied to the pinned source. Actual resolved versions are archived.
 "$CONDA_EXE" run --no-capture-output -n tp-tools python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
