@@ -65,8 +65,11 @@ def check(stage="agent", size="0.8B"):
     if resources["cpu_cores"] is not None and resources["cpu_cores"] < 2:
         errors.append("Container CPU quota is below 2 cores; do not build/run in AutoDL no-GPU mode.")
     for path in [Path(tools_python()), llama_dir() / "build/bin/llama-server", llama_dir() / "build/bin/llama-quantize"]:
-        if not path.is_file():
-            errors.append(f"Missing tool: {path}")
+        try:
+            if not path.is_file():
+                errors.append(f"Missing tool: {path}")
+        except OSError as exc:
+            errors.append(f"Cannot access tool {path}: {exc}")
     if (llama_dir() / ".git").exists():
         try:
             verify_llama()

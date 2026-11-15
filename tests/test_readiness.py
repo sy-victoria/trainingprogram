@@ -41,3 +41,15 @@ def test_agent_check_never_requires_gpu(monkeypatch):
         raise AssertionError("agent-only check should not query GPU")
     monkeypatch.setattr(readiness, "gpu_info", forbidden)
     assert check("agent")["ready"]
+
+
+def test_inaccessible_tool_is_reported(tmp_path, monkeypatch):
+    from trainingprogram import readiness
+    monkeypatch.setenv("TP_DATA", str(tmp_path))
+    monkeypatch.setattr(readiness, "gpu_info", lambda: {"available": False})
+    def denied(self):
+        raise PermissionError("test denied")
+    monkeypatch.setattr(Path, "is_file", denied)
+    result = check("gpu")
+    assert not result["ready"]
+    assert any("Cannot access tool" in error for error in result["errors"])

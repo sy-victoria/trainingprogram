@@ -11,7 +11,9 @@ export TP_DATA
 # AutoDL images may configure a lagging mirror in pip.conf. Override it per
 # invocation without changing the user's global pip configuration.
 TP_PIP_INDEX_URL="${TP_PIP_INDEX_URL:-https://pypi.org/simple}"
-CONDA_EXE="${CONDA_EXE:-/root/miniconda3/bin/conda}"
+CONDA_EXE="${CONDA_EXE:-$(command -v conda || true)}"
+CONDA_EXE="${CONDA_EXE:-$HOME/miniconda3/bin/conda}"
+export CONDA_EXE
 if [[ ! -x "$CONDA_EXE" ]]; then
   printf 'Conda not found. Set CONDA_EXE to its absolute path.\n' >&2
   exit 1
@@ -35,7 +37,11 @@ if full:
     limit = Path('/sys/fs/cgroup/memory.max')
     if limit.exists() and limit.read_text().strip() != 'max' and int(limit.read_text()) < 8 * 1024**3:
         raise SystemExit('At least 8GiB container memory is required for the GPU build. Use --agent-only in no-GPU mode.')
-for path, gib in ([('/root', 15), ('/root/autodl-tmp', 30)] if full else [('/root', 3)]):
+conda_root = Path(os.environ['CONDA_EXE']).resolve().parent.parent
+data_path = Path(os.environ['TP_DATA']).expanduser().resolve()
+while not data_path.exists():
+    data_path = data_path.parent
+for path, gib in ([(conda_root, 15), (data_path, 30)] if full else [(conda_root, 3)]):
     if shutil.disk_usage(path).free < gib * 1024**3:
         raise SystemExit(f'Need {gib} GiB free at {path}; inspect existing files before retrying')
 PY
