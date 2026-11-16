@@ -6,6 +6,8 @@
 
 共享服务器已实测的替代方式是 Bubblewrap 加用户级 systemd。它需要用户命名空间、systemd 用户会话和可用的 memory/pids cgroup 控制器；缺少条件时停止执行。
 
+激活项目环境并设置 `TP_DATA` 后，运行 `bash scripts/setup_bubblewrap.sh` 安装固定源码与依赖、归档源码哈希和依赖版本，并执行真实隔离验证。也可以用 `TP_JUDGE_PREFIX` 指定环境位置；以下是当前服务器已验证环境的路径。
+
 ```bash
 export TP_SANDBOX=bubblewrap
 export TP_BWRAP_PYTHON=/backup/trainingprogram-setup/judge-env/bin/python
