@@ -144,5 +144,17 @@ def export_bundle(destination):
                 name = path.relative_to(root).as_posix()
                 archive.writestr(name, content)
                 manifest.append({"path": name, "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()})
+        # Include exact model provenance files, never arbitrary files from model directories.
+        for path in sorted((root / "models").glob("*/*.json")):
+            if path.name not in {"source-manifest.json", "BF16.json", "Q4_K_M.json", "environment.json"}:
+                continue
+            if path.is_symlink() or any(p.is_symlink() for p in path.parents):
+                continue
+            if path.stat().st_size > 10 * 1024**2:
+                raise ValueError(f"Unexpectedly large model manifest: {path.name}")
+            content = json.dumps(redact(read_json(path)), ensure_ascii=False, indent=2).encode()
+            name = path.relative_to(root).as_posix()
+            archive.writestr(name, content)
+            manifest.append({"path": name, "bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()})
         archive.writestr("EXPORT_MANIFEST.json", json.dumps({"files": manifest, "note": "No model weights or checkpoints; known secrets redacted"}, indent=2))
     return str(destination)
