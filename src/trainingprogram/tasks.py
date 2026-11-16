@@ -2,7 +2,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from .common import ROOT, read_json, write_json
-from .sandbox import DockerSandbox
+from .sandbox import get_sandbox
 
 
 def verify_agent(directory):
@@ -15,7 +15,7 @@ def verify_agent(directory):
         shutil.rmtree(work / "tests", ignore_errors=True)
         shutil.copytree(ROOT / "tasks" / config["task"] / "workspace/tests", work / "tests")
         shutil.copy2(ROOT / "tasks" / config["task"] / "acceptance.py", work / "tests/test_acceptance.py")
-        result = DockerSandbox().run(work, ["python", "-m", "unittest", "discover", "-s", "tests", "-v"], timeout=60)
+        result = get_sandbox().run(work, ["python", "-m", "unittest", "discover", "-s", "tests", "-v"], timeout=60)
     result["passed"] = result["returncode"] == 0 and not result["timeout"]
     write_json(directory / "acceptance.json", result)
     return result

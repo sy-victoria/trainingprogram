@@ -14,6 +14,11 @@ TP_PIP_INDEX_URL="${TP_PIP_INDEX_URL:-https://pypi.org/simple}"
 CONDA_EXE="${CONDA_EXE:-$(command -v conda || true)}"
 CONDA_EXE="${CONDA_EXE:-$HOME/miniconda3/bin/conda}"
 export CONDA_EXE
+TP_BOOTSTRAP_PYTHON="$(command -v python3 || command -v python || true)"
+if [[ -z "$TP_BOOTSTRAP_PYTHON" ]]; then
+  printf 'Python 3 is required for installation checks.\n' >&2
+  exit 1
+fi
 if [[ ! -x "$CONDA_EXE" ]]; then
   printf 'Conda not found. Set CONDA_EXE to its absolute path.\n' >&2
   exit 1
@@ -24,7 +29,7 @@ if [[ "$STAGE" == "--all" ]]; then
     exit 1
   fi
 fi
-TP_BOOTSTRAP_STAGE="$STAGE" python - <<'PY'
+TP_BOOTSTRAP_STAGE="$STAGE" "$TP_BOOTSTRAP_PYTHON" - <<'PY'
 import shutil
 import subprocess
 import os
@@ -65,7 +70,7 @@ fi
 "$CONDA_EXE" install -y -n tp-tools -c nvidia cuda-toolkit=12.8
 "$CONDA_EXE" run --no-capture-output -n tp-tools python -m pip install --index-url "$TP_PIP_INDEX_URL" cmake==3.31.6 ninja==1.11.1.3
 LLAMA_DIR="$TP_DATA/tools/llama.cpp"
-LLAMA_REV=$(python -c 'import json; print(json.load(open("configs/versions.json"))["llama_cpp"])')
+LLAMA_REV=$("$TP_BOOTSTRAP_PYTHON" -c 'import json; print(json.load(open("configs/versions.json"))["llama_cpp"])')
 if [[ ! -d "$LLAMA_DIR/.git" ]]; then
   git init "$LLAMA_DIR"
   git -C "$LLAMA_DIR" remote add origin https://github.com/ggml-org/llama.cpp.git

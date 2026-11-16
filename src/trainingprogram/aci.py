@@ -3,14 +3,14 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from .common import confined, read_json, write_json, sha256, safe_name, digest
-from .sandbox import DockerSandbox
+from .sandbox import get_sandbox
 
 
 class ACI:
     def __init__(self, workspace, journal, sandbox=None):
         self.workspace = Path(workspace).resolve()
         self.journal = Path(journal)
-        self.sandbox = sandbox or DockerSandbox()
+        self.sandbox = sandbox or get_sandbox()
 
     def files(self):
         paths = []

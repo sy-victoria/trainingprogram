@@ -18,7 +18,7 @@ from .client import ModelClient
 from .common import ROOT, data_root, write_json, read_json, digest, exclusive, environment, safe_name, sha256
 from .models import load_artifact, versions
 from .common import gpu_device
-from .sandbox import DockerSandbox, SandboxUnavailable
+from .sandbox import DockerSandbox, SandboxUnavailable, get_sandbox
 
 DATA_URL = "https://github.com/evalplus/humanevalplus_release/releases/download/v0.1.10/HumanEvalPlus.jsonl.gz"
 GENERATION = {"temperature": 0, "seed": 2026, "max_tokens": 2048, "thinking": False,
@@ -180,7 +180,7 @@ def generate_samples(run, config, problems, client, pid=None):
 
 def judge(run_id, sandbox=None):
     run = data_root() / "runs" / safe_name(run_id)
-    sandbox = sandbox or DockerSandbox()
+    sandbox = sandbox or get_sandbox()
     # Probe before any result mutation. Missing isolation never becomes a model failure.
     image = sandbox.probe()
     config = read_json(run / "config.json")

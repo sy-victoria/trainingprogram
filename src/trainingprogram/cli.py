@@ -77,9 +77,9 @@ def main():
             while not existing.exists():
                 existing = existing.parent
             result["disk"] = {"target": str(root), "free_bytes": shutil.disk_usage(existing).free}
-            from .sandbox import DockerSandbox
+            from .sandbox import get_sandbox
             try:
-                result["sandbox"] = DockerSandbox().probe()
+                result["sandbox"] = get_sandbox().probe()
             except Exception as e:
                 result["sandbox"] = {"available": False, "reason": str(e)}
             write_json(root / "diagnostics" / "environment.json", result)

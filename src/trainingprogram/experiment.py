@@ -14,7 +14,7 @@ from .evaluation import ensure_config, task_filename, generate, speed, judge
 from .models import prepare, load_artifact, cleanup, versions
 from .readiness import require_gpu
 from .reporting import summarize
-from .sandbox import DockerSandbox
+from .sandbox import DockerSandbox, get_sandbox
 
 
 def jobs(experiment_id, sizes, mode):
@@ -104,7 +104,7 @@ def run_matrix(experiment_id, sizes, mode="subset", judging="defer", cleanup_com
         write_json(folder / "status.json", state)
         try:
             if judging == "required":
-                DockerSandbox().probe()  # fail before GPU work if judging is required
+                get_sandbox().probe()  # fail before GPU work if judging is required
             for size in sizes:
                 current = [j for j in matrix if j["size"] == size]
                 needs_service = [j for j in current if not generated(j["run"]) or
@@ -145,7 +145,7 @@ def run_matrix(experiment_id, sizes, mode="subset", judging="defer", cleanup_com
 def judge_matrix(experiment_id):
     folder = data_root() / "experiments" / safe_name(experiment_id)
     config = read_json(folder / "config.json")
-    DockerSandbox().probe()
+    get_sandbox().probe()
     with exclusive(data_root() / ".experiment.lock"):
         for job in config["jobs"]:
             judge(job["run"])

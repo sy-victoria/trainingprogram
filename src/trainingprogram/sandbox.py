@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import uuid
+import os
 from pathlib import Path
 
 IMAGE = "trainingprogram-eval:0.1"
@@ -10,6 +11,16 @@ IMAGE = "trainingprogram-eval:0.1"
 
 class SandboxUnavailable(RuntimeError):
     pass
+
+
+def get_sandbox():
+    backend = os.environ.get('TP_SANDBOX', 'docker')
+    if backend == 'docker':
+        return DockerSandbox()
+    if backend == 'bubblewrap':
+        from .bubblewrap import BubblewrapSandbox
+        return BubblewrapSandbox()
+    raise SandboxUnavailable(f'Unknown sandbox backend: {backend}')
 
 
 class DockerSandbox:

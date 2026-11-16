@@ -166,11 +166,11 @@ def run_suite(suite_id, base_url, model, budget=10, judging="defer"):
     """Run three tasks with explicit interactive approval; quitting preserves state."""
     from .evaluation import ensure_config
     from .tasks import verify_agent
-    from .sandbox import DockerSandbox
+    from .sandbox import get_sandbox
     from .client import ModelClient
     safe_name(suite_id)
     if judging == "required":
-        DockerSandbox().probe()
+        get_sandbox().probe()
     ModelClient(base_url, model).verify(model)
     folder = data_root() / "agent_suites" / suite_id
     config = {"base_url": base_url, "model": model, "budget": budget, "judging": judging,

@@ -1,6 +1,20 @@
 # 隔离判题与 AutoDL 兼容性
 
-代码生成不需要 Docker；执行生成代码需要 Docker。项目不会在 Docker 不可用时回退到宿主机 `exec` 或普通 subprocess 判题。
+代码生成不需要 Docker；执行生成代码需要经过验证的隔离后端。默认使用 Docker，也可显式选择下述 Bubblewrap 后端。项目不会回退到宿主机 `exec` 或普通 subprocess 判题。
+
+## Linux 用户级 Bubblewrap 后端
+
+共享服务器已实测的替代方式是 Bubblewrap 加用户级 systemd。它需要用户命名空间、systemd 用户会话和可用的 memory/pids cgroup 控制器；缺少条件时停止执行。
+
+```bash
+export TP_SANDBOX=bubblewrap
+export TP_BWRAP_PYTHON=/backup/trainingprogram-setup/judge-env/bin/python
+tp eval judge --run cloud-smoke-v2-0.8B-BF16-smoke
+```
+
+判题 Python 必须安装固定版本 EvalPlus 与依赖。该后端仅挂载只读系统库、Python 环境、判题脚本和任务目录，不挂载用户主目录或模型数据。隔离网络、PID、IPC 等命名空间；仅开放 `/proc/meminfo` 供 psutil 使用，不开放宿主进程目录。每个任务总内存 2GiB、swap 为 0、128 个进程；绑定最多两个允许的 CPU，并用 syscall 过滤禁止任务扩大亲和性。输出有界，墙钟超时会停止整个 systemd 进程组。判题身份包括 Python、依赖版本、判题脚本与隔离实现摘要；不同后端不能混入同一判题配置。
+
+服务器验证命令：设置 `TP_BWRAP_TESTS=1` 和 `TP_BWRAP_PYTHON` 后运行 `python -m pytest -q tests/test_integration_bwrap.py`。四项实测检查文件与网络隔离、CPU 亲和性不可扩大、内核实际 cgroup 内存/进程限制、输入阻塞超时，以及官方判题器对正确/错误程序的区分。该方式不依赖 Docker，也不会自动回退到无隔离执行。
 
 容器采用：禁网、只读根目录、非 root 用户、移除 capabilities、禁止提权、2 CPU、2GiB 内存、128 PID、临时目录限额、输出截断和墙钟超时。Agent 的工作目录只读挂载，模型不能改变测试命令。正式验收重新复制原始测试，并加入 Agent 未见过的测试。
 
