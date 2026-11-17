@@ -1,0 +1,21 @@
+# 完整版开发进度（2026-11-17）
+
+正式范围以 FULL_EXPERIMENT_PLAN.md、configs/full-study.json 为准，最高 27B。目标尚未完成，配置尚未冻结。
+
+已完成：
+- 先导六组30题和三项代理审批任务封存到独立 ZIP；SHA256 为 1a226ed14dbc3fa2245abae42c48d57dd9af38122f8f0f55b778f933e74b17d1。
+- 多基准生成接口：HumanEval+ / MBPP+；显式 seed、temperature、top-p、输出预算进入请求和配置锁。
+- MBPP 官方输入反序列化与特殊 oracle 路径；真实隔离判题正确/错误对照通过。
+- SWE-bench 官方新版源码、对应500题数据、控制器依赖锁定；单实例标准补丁/无效修复对照通过，清理正常。
+- Agent 数据白名单：仅 issue、repo、base commit、不可变镜像；排除 gold patch、隐藏测试、eval script、hints 和未知字段。
+- 本次 Linux 完整回归 57 passed、4 skipped（Docker 专属测试未在服务器执行）；bwrap 真测试开启。Windows xxhash DLL 被系统策略阻止时不宣称本地完整回归通过。
+
+必须继续：
+- 三套完整框架的统一仓库工具、持久化、预算与独立调度实现；目前另外两套仍只有最小示例。
+- 六个模型的 revision/架构验证；Q8、GPTQ、AWQ 实际量化与各自后端原精度基线。
+- 正式完整题集及多种子任务调度、统计区间、结果审计。
+- 9B/27B 多卡与远程推理、本地容器工具的完整调用链。
+- SWE-bench 9000轨迹正式矩阵尚未开始；单实例gold是环境测试。
+- 冻结协议后运行所有正式配置，完成报告、结果包和源码交付。
+
+不得把这份进度表、代码接口或机制测试当作尚未运行的模型实验成绩。

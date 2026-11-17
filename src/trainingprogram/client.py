@@ -11,11 +11,15 @@ class ModelClient:
         self.model = model
         self.timeout = timeout
 
-    def chat(self, messages, max_tokens=2048, seed=2026):
-        payload = {"model": self.model, "messages": messages, "temperature": 0,
+    def chat(self, messages, max_tokens=2048, seed=2026, temperature=0, top_p=None):
+        if not 0 <= temperature <= 2 or (top_p is not None and not 0 < top_p <= 1):
+            raise ValueError("Invalid sampling parameters")
+        payload = {"model": self.model, "messages": messages, "temperature": temperature,
                    "seed": seed, "max_tokens": max_tokens, "stream": True,
                    "stream_options": {"include_usage": True},
                    "chat_template_kwargs": {"enable_thinking": False}}
+        if top_p is not None:
+            payload["top_p"] = top_p
         text, reasoning, usage, finish, ttft = "", "", {}, None, None
         start = time.perf_counter()
         # No automatic retries: one sample is one model request.

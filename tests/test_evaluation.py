@@ -52,7 +52,8 @@ def test_interrupted_request_not_resampled(tmp_path, monkeypatch):
     assert read_json(tmp_path / "samples/HumanEval_0.json")["status"] == "interrupted"
 
 
-def test_http_sse_and_resume_end_to_end(tmp_path, monkeypatch):
+@pytest.mark.parametrize("sampling", [{}, {"temperature": 0.2, "top_p": 0.95, "seed": 2028}])
+def test_http_sse_and_resume_end_to_end(tmp_path, monkeypatch, sampling):
     monkeypatch.setattr("trainingprogram.evaluation.ResourceMonitor.sample", lambda self: None)
     received = []
     class Handler(BaseHTTPRequestHandler):
@@ -73,12 +74,15 @@ def test_http_sse_and_resume_end_to_end(tmp_path, monkeypatch):
     thread.start()
     try:
         client = ModelClient(f"http://127.0.0.1:{server.server_port}/v1")
-        config = {"task_ids": ["HumanEval/0"], "generation": GENERATION}
+        config = {"task_ids": ["HumanEval/0"], "generation": {**GENERATION, **sampling}}
         problems = {"HumanEval/0": {"entry_point": "f", "prompt": "def f(x):\n    pass"}}
         generate_samples(tmp_path, config, problems, client)
         generate_samples(tmp_path, config, problems, client)
         assert len(received) == 1
-        assert received[0]["temperature"] == 0
+        assert received[0]["temperature"] == sampling.get("temperature", 0)
+        assert received[0]["seed"] == sampling.get("seed", 2026)
+        if "top_p" in sampling:
+            assert received[0]["top_p"] == sampling["top_p"]
         assert received[0]["chat_template_kwargs"]["enable_thinking"] is False
         record = read_json(tmp_path / "samples/HumanEval_0.json")
         assert record["extraction_error"] is None

@@ -1,0 +1,20 @@
+{
+  "harness_repo": "https://github.com/SWE-bench/SWE-bench.git",
+  "harness_revision": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+  "dataset_repo": "SWE-bench/SWE-bench_Verified",
+  "dataset_revision": "78f471bf655a3137b2e8a75af1501690ec009ec3",
+  "dataset_export_sha256": "c5de877fa0a088059038ffef37ba9c24f2329b3e114c25ecc7e1ef559c6dd93d",
+  "instances": 500,
+  "validated_worker_image": "sha256:8c5c11934b94975a100874aed70d09cae07a7fbe28d2e630cc5831208a504479",
+  "preflight": {
+    "instance_id": "django__django-10914",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-10914@sha256:f26f0db931c6c1e785ab8287e1ea4f5f948846267db159deaf90b3fe7adea4e9",
+    "gold_run": "gold-preflight-fixed",
+    "negative_run": "negative-preflight-v1",
+    "gold_resolved": true,
+    "negative_resolved": false,
+    "infrastructure_errors": 0,
+    "unstopped_containers": 0,
+    "counts_as_model_result": false
+  }
+}

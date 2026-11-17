@@ -12,7 +12,7 @@ mkdir -p "$TP_DATA/tools/sources" "$TP_DATA/diagnostics"
 if [[ ! -x "$TP_JUDGE_PREFIX/bin/python" ]]; then
   "$TP_AGENT_PYTHON" -m venv --copies "$TP_JUDGE_PREFIX"
 fi
-"$TP_JUDGE_PREFIX/bin/python" -m pip install --index-url "${TP_PIP_INDEX_URL:-https://pypi.org/simple}" numpy==2.2.6 psutil==7.2.2 setuptools==80.9.0 setuptools-scm==8.3.1
+"$TP_JUDGE_PREFIX/bin/python" -m pip install --index-url "${TP_PIP_INDEX_URL:-https://pypi.org/simple}" numpy==2.2.6 psutil==7.2.2 setuptools==80.9.0 setuptools-scm==8.3.1 wget==3.2 appdirs==1.4.4 tempdir==0.7.1 datasets==5.2.0
 ARCHIVE="$TP_DATA/tools/sources/evalplus-$REV.tar.gz"
 curl --http1.1 -fL --retry 3 --connect-timeout 15 --max-time 300 -o "$ARCHIVE.partial" "https://codeload.github.com/evalplus/evalplus/tar.gz/$REV"
 mv "$ARCHIVE.partial" "$ARCHIVE"

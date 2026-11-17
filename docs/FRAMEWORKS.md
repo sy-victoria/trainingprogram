@@ -26,7 +26,7 @@ conda run -n tp-deep pip install -r requirements/deepagents-example.txt
 conda run -n tp-deep python examples/deepagents_demo.py --model 实际服务别名
 ```
 
-示例依赖文件保存了独立环境的完整解析版本，已验证导入与Agent对象构造。主项目不依赖它们。示例的真实工具调用效果需要服务器验证；若后端不支持它们使用的原生工具调用格式，记录失败，不能用主 Agent 的 JSON 协议成功率代替。
+示例依赖文件保存了独立环境的完整解析版本，已验证导入与Agent对象构造。主项目不依赖它们。2026-11-16 已在服务器上连接相同的 4B BF16 完成两个示例的真实工具调用：均成功读取文件并指出平方根边界错误，正常退出且无超时。原始输出保存在结果包 `diagnostics/framework-comparison/frameworks-4b-v1/`，见[实验记录](EXPERIMENT_RESULTS.md)。这不代表完整修复流程的成功率。
 
 Deep Agents 默认还提供虚拟文件系统等内置工具。本示例不配置宿主机文件系统后端或 shell，提示禁止委派；这不等于关闭它所有内置能力。因此只比较机制和开发体验，不声称这是严格同工具集合的性能对照。
 

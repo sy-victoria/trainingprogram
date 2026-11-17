@@ -45,6 +45,11 @@ def main():
             p.add_argument("--size", choices=["0.8B", "2B", "4B"], required=True)
             p.add_argument("--variant", choices=["BF16", "Q4_K_M"], required=True)
             p.add_argument("--mode", choices=["smoke", "subset", "full"], default="smoke")
+            p.add_argument("--benchmark", choices=["humaneval", "mbpp"], default="humaneval")
+            p.add_argument("--seed", type=int, default=2026)
+            p.add_argument("--temperature", type=float, default=0)
+            p.add_argument("--top-p", type=float, default=1)
+            p.add_argument("--max-tokens", type=int, default=2048)
     agent = sub.add_parser("agent").add_subparsers(dest="operation", required=True)
     suite = agent.add_parser("suite")
     suite.add_argument("--run", required=True)
@@ -106,7 +111,9 @@ def main():
         elif args.command == "eval":
             from . import evaluation
             if args.operation == "generate":
-                result = evaluation.generate(args.run, args.size, args.variant, args.mode, args.port)
+                result = evaluation.generate(args.run, args.size, args.variant, args.mode, args.port,
+                    benchmark=args.benchmark, generation={"seed": args.seed, "temperature": args.temperature,
+                                                         "top_p": args.top_p, "max_tokens": args.max_tokens})
             elif args.operation == "judge":
                 result = evaluation.judge(args.run)
             else:

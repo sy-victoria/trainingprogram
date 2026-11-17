@@ -26,20 +26,28 @@ GENERATION = {"temperature": 0, "seed": 2026, "max_tokens": 2048, "thinking": Fa
 PROMPT = "Implement the Python function below. Return the complete function and required imports in one Python code block. Do not include tests or explanations.\n\n"
 
 
-def dataset():
-    path = data_root() / "datasets" / "HumanEvalPlus-v0.1.10.json"
+def dataset(benchmark="humaneval"):
+    specs = {"humaneval": ("HumanEvalPlus", "v0.1.10", 164),
+             "mbpp": ("MbppPlus", "v0.2.0", 378)}
+    if benchmark not in specs:
+        raise ValueError("Unsupported benchmark")
+    name, version, count = specs[benchmark]
+    url = f"https://github.com/evalplus/{name.lower()}_release/releases/download/{version}/{name}.jsonl.gz"
+    path = data_root() / "datasets" / f"{name}-{version}.json"
     with exclusive(path.with_suffix(".lock")):
         if not path.exists():
             with httpx.Client(timeout=180, follow_redirects=True) as client:
-                r = client.get(DATA_URL)
+                r = client.get(url)
                 r.raise_for_status()
             raw = gzip.decompress(r.content)
             problems = [json.loads(line) for line in raw.decode().splitlines() if line.strip()]
-            if len(problems) != 164 or len({p["task_id"] for p in problems}) != 164:
-                raise ValueError("Unexpected HumanEval+ dataset shape")
-            write_json(path, {"url": DATA_URL, "version": "v0.1.10", "raw_sha256": hashlib.sha256(raw).hexdigest(),
+            if len(problems) != count or len({p["task_id"] for p in problems}) != count:
+                raise ValueError(f"Unexpected {name} dataset shape")
+            write_json(path, {"url": url, "version": version, "raw_sha256": hashlib.sha256(raw).hexdigest(),
                               "problems": {p["task_id"]: p for p in problems}})
         data = read_json(path)
+        if len(data["problems"]) != count or data["version"] != version or data["url"] != url:
+            raise ValueError("Cached dataset metadata mismatch")
     return data
 
 
@@ -117,13 +125,21 @@ def ensure_config(run, config):
 
 
 def task_filename(task_id):
-    if not re.fullmatch(r"HumanEval/\d+", task_id):
+    if not re.fullmatch(r"(?:HumanEval|Mbpp)/\d+", task_id):
         raise ValueError("Unexpected task ID")
     return task_id.replace("/", "_") + ".json"
 
 
-def generate(run_id, size, variant, mode="smoke", port=8080, client=None):
-    data = dataset()
+def generate(run_id, size, variant, mode="smoke", port=8080, client=None,
+             benchmark="humaneval", generation=None):
+    data = dataset(benchmark)
+    settings = dict(GENERATION)
+    if generation is not None:
+        if set(generation) - {"seed", "temperature", "top_p", "max_tokens"}:
+            raise ValueError("Unsupported generation override")
+        settings.update(generation)
+    if not 0 <= settings["temperature"] <= 2 or not 0 < settings.get("top_p", 1) <= 1 or settings["max_tokens"] <= 0:
+        raise ValueError("Invalid generation settings")
     ids = select_tasks(data["problems"], mode)
     _, artifact = load_artifact(size, variant)
     service = read_json(data_root() / "services" / f"{port}.json")
@@ -137,8 +153,9 @@ def generate(run_id, size, variant, mode="smoke", port=8080, client=None):
               "artifact_bytes": artifact["bytes"], "model_revision": artifact["revision"],
               "llama_cpp": artifact["llama_cpp"], "evalplus": versions()["evalplus"],
               "dataset_sha256": data["raw_sha256"], "task_ids": ids, "mode": mode,
-              "generation": GENERATION, "server": {k: service[k] for k in ("context", "threads", "parallel")},
+              "generation": settings, "server": {k: service[k] for k in ("context", "threads", "parallel")},
               "harness_hash": digest({p.name: sha256(p) for p in sorted((ROOT / "src/trainingprogram").glob("*.py"))})}
+    config["benchmark"] = benchmark
     current_environment = environment()
     config["hardware"] = {k: current_environment.get(k) for k in ("platform", "gpu", "cgroup")}
     with exclusive(run / ".lock"):
@@ -166,8 +183,10 @@ def generate_samples(run, config, problems, client, pid=None):
         write_json(out, record)
         with ResourceMonitor(pid) as monitor:
             try:
+                settings = config["generation"]
+                sampling = {key: settings[key] for key in ("temperature", "top_p") if key in settings}
                 result = client.chat([{"role": "user", "content": PROMPT + problems[task_id]["prompt"]}],
-                                     max_tokens=config["generation"]["max_tokens"], seed=config["generation"]["seed"])
+                                     max_tokens=settings["max_tokens"], seed=settings["seed"], **sampling)
                 code, error = extract_code(result["text"], problems[task_id]["entry_point"])
                 record.update(status="generated", response=result, code=code, extraction_error=error,
                               truncated=result["finish_reason"] == "length")
@@ -210,7 +229,8 @@ def judge(run_id, sandbox=None):
                 result.update(status="invalid_generation", reason=sample.get("extraction_error") or sample["status"])
             else:
                 response = sandbox.run(None, ["python", "-I", "/opt/judge_worker.py"], timeout=180,
-                                       stdin=json.dumps({"problem": problems[task_id], "code": sample["code"]}))
+                                       stdin=json.dumps({"problem": problems[task_id], "code": sample["code"],
+                                                         "dataset": config.get("benchmark", "humaneval")}))
                 if response["timeout"]:
                     # Includes reference execution; do not mislabel infrastructure/reference timeout as model failure.
                     result.update(status="infrastructure_error", reason="container_wall_timeout")

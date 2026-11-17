@@ -82,3 +82,18 @@ def test_official_judge_correct_and_wrong():
                            stdin=json.dumps(dict(problem=problem,code=code)))
         assert result['returncode'] == 0, result
         assert json.loads(result['output'])['passed'] is expected
+
+
+def test_mbpp_official_input_deserialization():
+    # MBPP/2 serializes tuple arguments as JSON lists; failing to deserialize
+    # would silently judge against different input semantics.
+    problem=dict(task_id='Mbpp/2', prompt='def tuple_input(x):\n',
+                 canonical_solution='    return isinstance(x, tuple)\n',
+                 entry_point='tuple_input', base_input=[[[1,2]]], plus_input=[[[3]]], atol=0)
+    sandbox=BubblewrapSandbox()
+    for code,expected in [('def tuple_input(x):\n    return isinstance(x, tuple)\n', True),
+                          ('def tuple_input(x):\n    return False\n', False)]:
+        result=sandbox.run(None,['python','-I','/opt/judge_worker.py'],timeout=30,
+                           stdin=json.dumps(dict(dataset='mbpp',problem=problem,code=code)))
+        assert result['returncode']==0, result
+        assert json.loads(result['output'])['passed'] is expected

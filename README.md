@@ -1,8 +1,10 @@
 # Coding Agent 与 Qwen3.5 量化实验
 
+**当前目标已扩展为最高 27B 的完整版实验。**六个模型、完整 HumanEval+/MBPP+、SWE-bench Verified、三套完整 Agent、多种量化与多随机种子，见[实施计划](docs/FULL_EXPERIMENT_PLAN.md)及[真实进度](docs/FULL_STUDY_PROGRESS.md)。下方原有 AutoDL 流程和 30 题结果属于先导阶段，不能代表完整版完成。
+
 面向三天课程作业：**LangGraph coding agent + 自行量化 + 可复现评测**。目标机器为 AutoDL RTX 4090 24GB、90GiB 内存、25 CPU配额、Ubuntu 20.04、50GB数据盘。
 
-本次覆盖 Qwen3.5-0.8B／2B／4B 的 BF16 文本 GGUF 与 Q4_K_M。Qwen3.8、9B、27B及更大规模留待后续，**不代表原作业全部完成**。仓库不包含实验成绩、模型权重或密钥。
+本次覆盖 Qwen3.5-0.8B／2B／4B 的 BF16 文本 GGUF 与 Q4_K_M。Qwen3.8、9B、27B及更大规模留待后续，**不代表原作业全部完成**。六组固定 30 题的真实评测已完成，见[实验记录](docs/EXPERIMENT_RESULTS.md)。仓库不包含模型权重、密钥或原始运行产物；详细证据通过独立结果包交付。
 
 ## 没有算力时：准备与离线自检
 
