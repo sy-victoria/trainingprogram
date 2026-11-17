@@ -91,6 +91,25 @@ if a!=b: raise ValueError('Image source content differs from dataset base commit
 print(hashlib.sha256(repr(a).encode()).hexdigest())
 '''
 
+SNAPSHOT = r'''
+import hashlib,os,pathlib,subprocess
+root=pathlib.Path('/testbed')
+def git(*args): return subprocess.check_output(['git','-C',str(root),*args])
+h=hashlib.sha256(git('rev-parse','HEAD'))
+h.update(git('diff','--binary','HEAD'))
+for raw in sorted(git('ls-files','--others','--exclude-standard','-z').split(b'\0')):
+    if not raw: continue
+    h.update(b'\0path\0'+raw+b'\0')
+    p=root/os.fsdecode(raw)
+    if p.is_symlink():
+        h.update(b'link\0'+os.fsencode(os.readlink(p)))
+    else:
+        if not p.resolve().is_relative_to(root): raise ValueError('File escapes workspace')
+        with p.open('rb') as f:
+            while chunk:=f.read(1048576): h.update(chunk)
+print(h.hexdigest())
+'''
+
 
 class DockerWorkspace:
     def __init__(self, directory, issue, memory_gib=8, cpus=2):
@@ -162,7 +181,17 @@ class DockerWorkspace:
             if not matches:
                 self._checked("stop", "--time", "1", self.name)
                 raise RuntimeError("Repository source or checkpoint HEAD differs from verified baseline")
+            current = self.fingerprint()
+            checkpoint = self.directory / "workspace-state.json"
+            if checkpoint.exists() and read_json(checkpoint)["fingerprint"] != current:
+                self._checked("stop", "--time", "1", self.name)
+                raise RuntimeError("Workspace files changed outside the recorded tool sequence")
+            write_json(checkpoint, {"fingerprint": current})
         return self.name
+
+    def fingerprint(self):
+        self._inspect()
+        return self._checked("exec", self.name, "/opt/miniconda3/bin/python", "-c", SNAPSHOT)
 
     def stop(self):
         if self._inspect() is not None:
@@ -199,6 +228,14 @@ class DockerWorkspace:
                 # Killing docker exec's client alone does not kill its process in the container.
                 self._checked("stop", "--time", "1", self.name)
                 result["workspace_stopped"] = True
+                # Restart only to record the resulting filesystem, never to replay
+                # the timed-out command. Leave the container stopped afterwards.
+                self._checked("start", self.name)
+                state = self.fingerprint()
+                self._checked("stop", "--time", "1", self.name)
+            else:
+                state = self.fingerprint()
+            write_json(self.directory / "workspace-state.json", {"fingerprint": state, "operation": operation_id})
             write_json(journal, {"key": key, "status": "finished", "tool": tool, "args": args, "result": result})
             return result
 
@@ -210,4 +247,5 @@ class DockerWorkspace:
         result = self._docker("exec", self.name, "git", "-C", "/testbed", "diff", "--binary", baseline, limit=2_000_000)
         if result["returncode"] or result["timeout"] or result["truncated"]:
             raise RuntimeError("Patch export failed or exceeds 2MB")
+        write_json(self.directory / "workspace-state.json", {"fingerprint": self.fingerprint(), "operation": "export"})
         return result["output"]

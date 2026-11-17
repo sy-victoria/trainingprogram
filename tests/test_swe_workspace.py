@@ -51,7 +51,11 @@ def test_real_repository_patch_replay_restart_timeout_and_export(tmp_path):
         assert not restored._inspect()['State']['Running']
         restored.start()
         assert '+after' in restored.patch()
+        # Simulate an out-of-band edit; a new controller must refuse recovery.
+        subprocess.run(['docker','exec',workspace.name,'bash','-lc',"printf 'tampered\\n' > agent_fixture.txt"], check=True)
         restored.stop()
+        with pytest.raises(RuntimeError, match='outside'):
+            DockerWorkspace(tmp_path/'task', issue, memory_gib=2).start()
     finally:
         if workspace._inspect() is not None:
             workspace.stop()
